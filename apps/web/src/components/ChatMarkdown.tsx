@@ -62,6 +62,7 @@ import React, {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   isValidElement,
+  lazy,
   use,
   useCallback,
   memo,
@@ -88,6 +89,7 @@ import { parseComposerContextHref } from "@t3tools/shared/composerContextReferen
 import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import remarkGfm from "remark-gfm";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
+import { remarkChatMath } from "../markdown-math";
 import {
   artifactTemplateFromHastProperties,
   CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES,
@@ -269,6 +271,7 @@ export function shouldUseMarkdownFileBrowserPrimaryAction(input: {
 
 const EMPTY_MARKDOWN_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
 const EMPTY_REMARK_PLUGINS: NonNullable<ReactMarkdownOptions["remarkPlugins"]> = [];
+const MarkdownMath = lazy(() => import("./chat/MarkdownMath"));
 
 const ARTIFACT_TEMPLATE_ICON_BY_KIND = {
   document: FileTextIcon,
@@ -462,7 +465,15 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
   attributes: {
     ...defaultSchema.attributes,
     "*": (defaultSchema.attributes?.["*"] ?? []).filter((attribute) => attribute !== "title"),
-    code: [...(defaultSchema.attributes?.code ?? []), "dataCodeMeta", "dataInlineCode"],
+    code: [
+      ...(defaultSchema.attributes?.code ?? []).filter(
+        (attribute) => !Array.isArray(attribute) || attribute[0] !== "className",
+      ),
+      ["className", /^language-./, "math-inline", "math-display"],
+      "dataCodeMeta",
+      "dataInlineCode",
+      "dataMathSource",
+    ],
     blockquote: [...(defaultSchema.attributes?.blockquote ?? []), "dataAlert"],
     div: [...(defaultSchema.attributes?.div ?? []), ...CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES],
     a: [...(defaultSchema.attributes?.a ?? []), "dataPullRequestAutolink"],
@@ -482,6 +493,7 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
 
 const CHAT_MARKDOWN_REMARK_PLUGINS = [
   remarkGfm,
+  remarkChatMath,
   remarkGithubAlerts,
   remarkNormalizeListItemIndentation,
   remarkCodexDirectives,
@@ -491,6 +503,7 @@ const CHAT_MARKDOWN_REMARK_PLUGINS = [
 
 const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkGfm,
+  remarkChatMath,
   remarkGithubAlerts,
   remarkNormalizeListItemIndentation,
   remarkCodexDirectives,
@@ -3060,6 +3073,32 @@ const CHAT_MARKDOWN_COMPONENTS = {
     const { cwd, imageBaseDir, inlineCodeFileLinkMetaByText, fileLinkChip } = use(
       ChatMarkdownRendererContext,
     );
+    const classes = className?.split(/\s+/);
+    const displayMath = classes?.includes("math-display") === true;
+    if (displayMath || classes?.includes("math-inline")) {
+      const math = nodeToPlainText(children);
+      const source =
+        typeof node?.properties.dataMathSource === "string"
+          ? node.properties.dataMathSource
+          : displayMath
+            ? `$$\n${math}\n$$`
+            : `$${math}$`;
+      const fallback = (
+        <code
+          className={displayMath ? "chat-markdown-math-display" : "chat-markdown-math-inline"}
+          data-markdown-copy={displayMath ? `\n\n${source}\n\n` : source}
+        >
+          {source}
+        </code>
+      );
+      return (
+        <RenderErrorBoundary resetKeys={[math]} fallback={fallback}>
+          <Suspense fallback={fallback}>
+            <MarkdownMath math={math} source={source} display={displayMath} />
+          </Suspense>
+        </RenderErrorBoundary>
+      );
+    }
     if (node?.properties?.dataInlineCode != null) {
       const codeText = nodeToPlainText(children);
       const fileLinkMeta =

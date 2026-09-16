@@ -399,6 +399,12 @@ export function chatMarkdownClipboardPayload(
       }
       continue;
     }
+    // A selection entirely inside KaTeX omits the wrapper that owns the TeX
+    // source. Copy the equation once instead of its duplicated visual glyphs.
+    const math = ancestorElement?.closest(
+      ".chat-markdown-math-inline, .chat-markdown-math-display",
+    );
+    if (math) container.replaceChildren(math.cloneNode(true));
     const text = serializeRenderedMarkdownFragment(container);
     if (!text) continue;
     texts.push(text);
