@@ -516,9 +516,11 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkNormalizeLinksAndTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
+/** Parse raw HTML while reserving math rendering and copy metadata for parser-owned nodes. */
 function rehypeRawMath() {
   const parseRaw = rehypeRaw({ passThrough: ["chatMath"] });
   return (...[tree, file]: Parameters<typeof parseRaw>) => {
+    /** Carry parsed math through HTML processing using a node type HTML cannot create. */
     const protect = (node: MarkdownImageHastNode) => {
       if (
         node.type === "element" &&
@@ -532,6 +534,7 @@ function rehypeRawMath() {
     };
     protect(tree);
     const parsed = parseRaw(tree, file);
+    /** Restore parsed math and remove math metadata supplied by raw HTML. */
     const restore = (node: MarkdownImageHastNode) => {
       if (node.type === "chatMath") {
         node.type = "element";
@@ -3141,6 +3144,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       normalizedHref,
     );
   },
+  /** Render parsed math, inline file links, or code with the appropriate copy behavior. */
   code: function MarkdownCode({ node, children, className, ...props }) {
     const { cwd, imageBaseDir, inlineCodeFileLinkMetaByText, fileLinkChip } = use(
       ChatMarkdownRendererContext,

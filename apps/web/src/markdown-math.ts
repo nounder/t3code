@@ -15,6 +15,7 @@ function latexMath(flow: boolean): Construct {
   return {
     name: flow ? "latexMathFlow" : "latexMathText",
     ...(flow ? { concrete: true } : {}),
+    /** Tokenize a TeX-delimited expression while preserving Markdown source positions. */
     tokenize(effects, ok, nok) {
       const math = flow ? "mathFlow" : "mathText";
       const fence = flow ? "mathFlowFence" : "mathTextSequence";
@@ -23,6 +24,7 @@ function latexMath(flow: boolean): Construct {
       let inValue = false;
       const closingDelimiter: Construct = {
         partial: true,
+        /** Probe for the matching closing delimiter without consuming a failed match. */
         tokenize(checkEffects, yes, no) {
           return (code) => {
             checkEffects.enter("mathTextSequence");
@@ -39,6 +41,7 @@ function latexMath(flow: boolean): Construct {
 
       return start;
 
+      /** Begin the math token at the opening backslash. */
       function start(code: number | null): State | undefined {
         effects.enter(math);
         effects.enter(fence);
@@ -46,6 +49,7 @@ function latexMath(flow: boolean): Construct {
         return opening;
       }
 
+      /** Select the matching delimiter, allowing only brackets in flow mode. */
       function opening(code: number | null): State | undefined {
         if (code !== 91 && (flow || code !== 40)) return nok(code);
         closing = code === 91 ? 93 : 41;
@@ -54,6 +58,7 @@ function latexMath(flow: boolean): Construct {
         return inside;
       }
 
+      /** Consume formula content until a matching delimiter or an incomplete ending. */
       function inside(code: number | null): State | undefined {
         if (code === null) return nok(code);
         if (markdownLineEnding(code)) {
@@ -73,6 +78,7 @@ function latexMath(flow: boolean): Construct {
         return inside;
       }
 
+      /** Keep escaped characters inside the formula instead of treating them as delimiters. */
       function escape(code: number | null): State | undefined {
         if (!inValue) effects.enter(value);
         inValue = true;
@@ -85,6 +91,7 @@ function latexMath(flow: boolean): Construct {
         };
       }
 
+      /** Finish the formula and check trailing content when parsing a display block. */
       function close(code: number | null): State | undefined {
         if (inValue) effects.exit(value);
         effects.enter(fence);
@@ -97,6 +104,7 @@ function latexMath(flow: boolean): Construct {
         };
       }
 
+      /** Accept a display block only when the rest of its line is whitespace. */
       function after(code: number | null): State | undefined {
         // A display formula with surrounding prose belongs to the paragraph.
         if (code === null || markdownLineEnding(code)) return ok(code);
@@ -107,6 +115,7 @@ function latexMath(flow: boolean): Construct {
         return nok(code);
       }
 
+      /** Consume trailing display-block whitespace before checking the line ending. */
       function trailingSpace(code: number | null): State | undefined {
         if (markdownSpace(code)) {
           effects.consume(code);
@@ -129,6 +138,7 @@ export const remarkChatMath: Plugin<[], Root> = function () {
   if (dollarSyntax && dollar && !Array.isArray(dollar)) {
     dollarSyntax[36] = {
       ...dollar,
+      /** Reject spaced single-dollar expressions so prices do not swallow later math. */
       tokenize(effects, ok, nok) {
         return dollar.tokenize.call(
           this,
@@ -156,6 +166,7 @@ export const remarkChatMath: Plugin<[], Root> = function () {
   if (!parse) return;
   this.parser = (source, file) => {
     const tree = parse(source, file) as Root;
+    /** Attach rendering and copy metadata, removing container prefixes from copied formulas. */
     const visit = (node: Root | RootContent, inContainer = false) => {
       if (node.type === "math" || node.type === "inlineMath") {
         const start = node.position?.start.offset;

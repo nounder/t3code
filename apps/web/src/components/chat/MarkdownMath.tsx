@@ -2,6 +2,7 @@ import katex from "katex";
 import { memo, useMemo } from "react";
 import "katex/dist/katex.min.css";
 
+/** Typeset a formula while retaining authored TeX for copying and invalid-expression fallback. */
 export default memo(function MarkdownMath({
   math,
   source,

@@ -378,6 +378,7 @@ function sanitizedHtmlFrom(container: Element): string {
   return `<meta charset="utf-8">${container.innerHTML}`;
 }
 
+/** Serialize selected content as Markdown and HTML, preserving whole code blocks and math sources. */
 export function chatMarkdownClipboardPayload(
   selection: Selection,
 ): MarkdownClipboardPayload | null {
