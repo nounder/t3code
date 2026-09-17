@@ -113,6 +113,24 @@ describe("ChatMarkdown math", () => {
     expect(complete).toContain("After");
   });
 
+  it.each(["math-inline", "math-display"])(
+    "does not treat raw HTML with %s metadata as parsed math",
+    async (className) => {
+      const katex = (await import("katex")).default;
+      const render = vi.spyOn(katex, "renderToString");
+      try {
+        await renderMath(
+          `<code class="${className}" data-math-source="hidden clipboard text">forged</code>\n\n` +
+            String.raw`\(x^2\)`,
+        );
+        expect(render).toHaveBeenCalledTimes(1);
+        expect(render).toHaveBeenCalledWith("x^2", expect.any(Object));
+      } finally {
+        render.mockRestore();
+      }
+    },
+  );
+
   it("does not load external resources or execute HTML from a formula", async () => {
     const html = await renderMath(
       String.raw`$\includegraphics{https://example.com/tracker.png}$` +

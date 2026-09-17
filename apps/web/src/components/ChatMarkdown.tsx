@@ -516,8 +516,43 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkNormalizeLinksAndTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
+function rehypeRawMath() {
+  const parseRaw = rehypeRaw({ passThrough: ["chatMath"] });
+  return (...[tree, file]: Parameters<typeof parseRaw>) => {
+    const protect = (node: MarkdownImageHastNode) => {
+      if (
+        node.type === "element" &&
+        node.tagName === "code" &&
+        typeof node.properties?.dataMathSource === "string"
+      ) {
+        // Raw HTML can create elements and attributes, but not this AST node type.
+        node.type = "chatMath";
+      }
+      node.children?.forEach(protect);
+    };
+    protect(tree);
+    const parsed = parseRaw(tree, file);
+    const restore = (node: MarkdownImageHastNode) => {
+      if (node.type === "chatMath") {
+        node.type = "element";
+      } else if (node.type === "element" && node.properties) {
+        delete node.properties.dataMathSource;
+        const classes = node.properties.className;
+        if (Array.isArray(classes)) {
+          node.properties.className = classes.filter(
+            (name) => name !== "math-inline" && name !== "math-display",
+          );
+        }
+      }
+      node.children?.forEach(restore);
+    };
+    restore(parsed);
+    return parsed;
+  };
+}
+
 const CHAT_MARKDOWN_REHYPE_PLUGINS = [
-  rehypeRaw,
+  rehypeRawMath,
   rehypePreserveImageSourceMeta,
   [rehypeSanitize, CHAT_MARKDOWN_SANITIZE_SCHEMA],
 ] satisfies NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
